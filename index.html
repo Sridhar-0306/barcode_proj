@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Add Product & Scan</title>
+  <script src="https://cdn.jsdelivr.net/npm/jsbarcode/dist/JsBarcode.all.min.js"></script>
+</head>
+<body>
+
+  <h2>Add Product</h2>
+  <form id="addProductForm">
+    <input type="text" name="name" placeholder="Product Name" required /><br><br>
+    <input type="number" step="0.01" name="price" placeholder="Price" required /><br><br>
+    <textarea name="description" placeholder="Description"></textarea><br><br>
+    <input type="file" name="image" accept="image/*" required /><br><br>
+    <button type="submit">Add Product</button>
+  </form>
+
+  <div id="addResult"></div>
+
+  <hr>
+
+  <h2>Scan Product by Barcode</h2>
+  <input id="barcodeInput" placeholder="Enter Barcode" />
+  <button id="scanBtn">Scan</button>
+
+  <div id="productInfo"></div>
+
+  <script>
+    const cloudName = 'dlokaiodo'; // your Cloudinary cloud name
+    const unsignedUploadPreset = 'AddProduct'; // your unsigned preset
+    const apiUrl = 'https://your-backend-domain/api.php'; // change to your actual PHP endpoint
+
+    document.getElementById('addProductForm').onsubmit = async function(e) {
+      e.preventDefault();
+      const form = e.target;
+      const name = form.name.value.trim();
+      const price = parseFloat(form.price.value);
+      const description = form.description.value.trim();
+      const file = form.image.files[0];
+      if (!file) {
+        alert('Please select an image.');
+        return;
+      }
+
+      // Upload image to Cloudinary
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('upload_preset', unsignedUploadPreset);
+
+      try {
+        const res = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/upload`, {
+          method: 'POST',
+          body: formData
+        });
+        const data = await res.json();
+        const imgUrl = data.secure_url;
+
+        const barcode = 'P' + Date.now(); // Generate barcode
+
+        // Send product data to backend API
+        const resp = await fetch(apiUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, price, description, image_url: imgUrl, barcode_data: barcode }),
+        });
+        const result = await resp.json();
+
+        if (result.success) {
+          document.getElementById('addResult').innerHTML = `
+            <p>Product added! ID: ${result.id}</p>
+            <p>Barcode: ${barcode}</p>
+            <svg id="barcode"></svg>
+          `;
+          JsBarcode("#barcode", barcode, { width: 3, height: 100, displayValue: true });
+          form.reset();
+        } else {
+          alert('Error adding product: ' + result.error);
+        }
+
+      } catch (error) {
+        alert('Upload or save failed: ' + error.message);
+      }
+    };
+
+    document.getElementById('scanBtn').onclick = async function() {
+      const barcode = document.getElementById('barcodeInput').value.trim();
+      if (!barcode) {
+        alert('Please enter a barcode');
+        return;
+      }
+      try {
+        const resp = await fetch(apiUrl + '?barcode=' + encodeURIComponent(barcode));
+        const product = await resp.json();
+        if (product.error) {
+          document.getElementById('productInfo').textContent = 'Product not found.';
+        } else {
+          document.getElementById('productInfo').innerHTML = `
+            <h3>${product.name}</h3>
+            <p>Price: $${product.price}</p>
+            <p>${product.description}</p>
+            <img src="${product.image_url}" style="max-width:200px;"/>
+            <svg id="barcodeScan"></svg>
+          `;
+          JsBarcode("#barcodeScan", product.barcode_data, { width: 3, height: 100, displayValue: true });
+        }
+      } catch (e) {
+        alert('Failed to load product data: ' + e.message);
+      }
+    };
+  </script>
+</body>
+</html>
