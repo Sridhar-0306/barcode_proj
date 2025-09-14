@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: php-backend
+    env: docker
+    dockerfilePath: Dockerfile
+    branch: main
+    autoDeploy: true
+    envVars:
+      - key: PORT
+        value: "80"
